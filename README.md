@@ -45,10 +45,10 @@ If omitted, default mask values are used (`x=885 y=1728 w=115 h=95`).
 
 ### Output layout
 
-Each run creates a work folder named after the input file:
+Each run creates a timestamped work folder under `output/`:
 
 ```
-input/
+output/20260524-090130-input/
 ├── frames/           # extracted frames
 ├── masks/            # logo masks
 ├── cleaned_frames/   # inpainted frames
@@ -60,10 +60,10 @@ input/
 
 `run.sh` runs these steps automatically:
 
-1. Extract frames → `{name}/frames/`
-2. Extract audio → `{name}/audio.aac`
+1. Extract frames → `output/{datetime}-{name}/frames/`
+2. Extract audio → `output/{datetime}-{name}/audio.aac`
 3. Create masks → `make_mask.py`
-4. Batch inpaint (LaMA, CPU) → `{name}/cleaned_frames/`
+4. Batch inpaint (LaMA, CPU) → `output/{datetime}-{name}/cleaned_frames/`
 5. Rebuild video with original framerate and audio
 
 Step 4 is slow on CPU (~2–3 s/frame). A 30 s 60 fps video can take 1–2 hours.

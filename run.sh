@@ -61,8 +61,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-WORK_DIR="$(basename "$INPUT")"
-WORK_DIR="${WORK_DIR%.*}"
+INPUT_NAME="$(basename "$INPUT")"
+INPUT_NAME="${INPUT_NAME%.*}"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+WORK_DIR="output/${TIMESTAMP}-${INPUT_NAME}"
 
 FRAMES_DIR="$WORK_DIR/frames"
 MASKS_DIR="$WORK_DIR/masks"
