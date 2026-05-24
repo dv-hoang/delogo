@@ -1,0 +1,4 @@
+iopaint-env/
+**/frames/ 
+**/masks/
+**/cleaned_frames/
