@@ -3,13 +3,28 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $0 <input.mp4> [delogo=x:y:w:h] [output.mp4]
+Usage: $0 <input.mp4> [delogo=x:y:w:h] [device=cpu|mps|cuda] [output.mp4]
 
 Examples:
   $0 input.mp4
   $0 input.mp4 delogo=x=895:y=1735:w=80:h=80
+  $0 input.mp4 delogo=x=895:y=1735:w=80:h=80 device=mps
   $0 input.mp4 delogo=x=895:y=1735:w=80:h=80 custom_output.mp4
 EOF
+}
+
+detect_device() {
+  if [[ -n "${DEVICE:-}" ]]; then
+    echo "$DEVICE"
+    return
+  fi
+  if python -c "import torch; raise SystemExit(0 if torch.backends.mps.is_available() else 1)" 2>/dev/null; then
+    echo "mps"
+  elif python -c "import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+    echo "cuda"
+  else
+    echo "cpu"
+  fi
 }
 
 parse_delogo() {
@@ -38,6 +53,7 @@ shift
 
 OUTPUT=""
 DELOGO=""
+DEVICE=""
 LOGO_X=885
 LOGO_Y=1728
 LOGO_W=115
@@ -48,6 +64,10 @@ while [[ $# -gt 0 ]]; do
     delogo=*)
       DELOGO="$1"
       parse_delogo "$DELOGO"
+      shift
+      ;;
+    device=*)
+      DEVICE="${1#device=}"
       shift
       ;;
     -h|--help)
@@ -67,9 +87,10 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 WORK_DIR="output/${TIMESTAMP}-${INPUT_NAME}"
 
 FRAMES_DIR="$WORK_DIR/frames"
-MASKS_DIR="$WORK_DIR/masks"
 CLEANED_DIR="$WORK_DIR/cleaned_frames"
+MASK="$WORK_DIR/mask.png"
 AUDIO="$WORK_DIR/audio.aac"
+IOPAINT_CONFIG="$WORK_DIR/iopaint.json"
 OUTPUT="${OUTPUT:-$WORK_DIR/output_clean.mp4}"
 
 if [[ ! -f "$INPUT" ]]; then
@@ -88,9 +109,11 @@ FRAMERATE="$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_r
 FRAMERATE="${FRAMERATE%.*}"
 WIDTH="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$INPUT")"
 HEIGHT="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$INPUT")"
+IOPAINT_DEVICE="$(detect_device)"
 
 echo "==> Working directory: $WORK_DIR"
 echo "==> Logo area: x=$LOGO_X y=$LOGO_Y w=$LOGO_W h=$LOGO_H"
+echo "==> IOPaint device: $IOPAINT_DEVICE"
 echo "==> Step 1/5: Extract frames from $INPUT"
 mkdir -p "$FRAMES_DIR"
 ffmpeg -y -i "$INPUT" "$FRAMES_DIR/%06d.png"
@@ -103,11 +126,21 @@ python make_mask.py "$WORK_DIR" --x "$LOGO_X" --y "$LOGO_Y" --w "$LOGO_W" --h "$
 
 echo "==> Step 4/5: Run IOPaint batch clean"
 mkdir -p "$CLEANED_DIR"
+CROP_MARGIN=$((LOGO_W > LOGO_H ? LOGO_W / 4 : LOGO_H / 4))
+CROP_MARGIN=$((CROP_MARGIN < 16 ? 16 : CROP_MARGIN))
+CROP_MARGIN=$((CROP_MARGIN > 64 ? 64 : CROP_MARGIN))
+cat > "$IOPAINT_CONFIG" <<EOF
+{
+  "hd_strategy": "Crop",
+  "hd_strategy_crop_margin": $CROP_MARGIN
+}
+EOF
 iopaint run \
   --model=lama \
-  --device=cpu \
+  --device="$IOPAINT_DEVICE" \
+  --config="$IOPAINT_CONFIG" \
   --image="$FRAMES_DIR" \
-  --mask="$MASKS_DIR" \
+  --mask="$MASK" \
   --output="$CLEANED_DIR"
 
 echo "==> Step 5/5: Rebuild video at ${FRAMERATE} fps -> $OUTPUT"

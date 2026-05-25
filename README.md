@@ -30,8 +30,11 @@ pip install -r requirements.txt
 ```bash
 ./run.sh input.mp4
 ./run.sh input.mp4 delogo=x=895:y=1735:w=80:h=80
+./run.sh input.mp4 delogo=x=895:y=1735:w=80:h=80 device=mps
 ./run.sh input.mp4 delogo=x=895:y=1735:w=80:h=80 custom_output.mp4
 ```
+
+On Apple Silicon, `run.sh` auto-selects `mps` (GPU). Override with `device=cpu` if needed.
 
 ### Logo coordinates
 
@@ -50,9 +53,10 @@ Each run creates a timestamped work folder under `output/`:
 ```
 output/20260524-090130-input/
 ├── frames/           # extracted frames
-├── masks/            # logo masks
+├── mask.png          # shared logo mask (all frames)
 ├── cleaned_frames/   # inpainted frames
 ├── audio.aac         # extracted audio
+├── iopaint.json      # IOPaint crop tuning
 └── output_clean.mp4  # final video
 ```
 
@@ -63,10 +67,10 @@ output/20260524-090130-input/
 1. Extract frames → `output/{datetime}-{name}/frames/`
 2. Extract audio → `output/{datetime}-{name}/audio.aac`
 3. Create masks → `make_mask.py`
-4. Batch inpaint (LaMA, CPU) → `output/{datetime}-{name}/cleaned_frames/`
+4. Batch inpaint (LaMA, GPU/MPS when available) → `output/{datetime}-{name}/cleaned_frames/`
 5. Rebuild video with original framerate and audio
 
-Step 4 is slow on CPU (~2–3 s/frame). A 30 s 60 fps video can take 1–2 hours.
+Step 4 uses Apple Silicon GPU (`mps`) when available, a single shared mask file, and a tighter crop margin around the logo. It still takes a while on long clips (~0.3–1 s/frame on MPS vs ~2–3 s/frame on CPU).
 
 ## Quick alternative (ffmpeg blur)
 
